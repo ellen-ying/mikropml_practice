@@ -1,9 +1,10 @@
 library(tidyverse)
 library(here)
 library(broom)
-library(ggplot2)
 library(ggtext)
 library(wesanderson)
+
+set.seed(1990331)
 
 shared <- 
   # locate the file
@@ -110,3 +111,74 @@ composite %>%
   )
 
 ggsave("figures/significant_genera.pdf", width = 6, height = 4)
+
+get_sens_spec <- function(threshold, score, actual, direction) {
+  
+  # threshold <- 100
+  # score <- test$score
+  # actual <- test$srn
+  # direction <- "greaterthan"
+  
+  predicted <- 
+    if (direction == "greaterthan") {
+      score > threshold
+    } else {
+        score < threshold
+      }
+  
+  tp <- sum(actual == TRUE & predicted == TRUE)
+  fp <- sum(actual == FALSE & predicted == TRUE)
+  tn <- sum(actual == FALSE & predicted == FALSE)
+  fn <- sum(actual == TRUE & predicted == FALSE)
+  
+  sensitivity <-  tp / (tp + fn)
+  specificity = tn / (tn + fp)
+  
+  tibble(sensitivity = sensitivity,
+         specificity = specificity) 
+  
+}
+ 
+#get_sens_spec(100, test$score, test$srn, "greaterthan")
+
+get_roc_data <- function(x, direction) {
+  
+  #x <- test
+  #direction <- "greaterthan"
+  
+  threshold <- unique(x$score) %>% sort()
+  score <- x$score
+  actual <- x$srn
+  
+  map_dfr(threshold, ~ get_sens_spec(.x, score, actual, direction)) %>% 
+    add_row(sensitivity = 1, specificity = 0)
+  
+}
+
+#get_roc_data(test, "greaterthan")
+
+roc_data <- 
+  composite %>% 
+  inner_join(sig_genera, by = "taxonomy") %>% 
+  select(group, taxonomy, rel_abund, fit_result, srn) %>% 
+  pivot_wider(names_from = taxonomy, values_from = rel_abund) %>% 
+  pivot_longer(cols = -c(group, srn), names_to = "metric", values_to = "score") %>% 
+  nest(data = -metric) %>% 
+  mutate(
+    direction = ifelse(metric == "Lachnospiraceae_unclassified", "lessthan", "greaterthan")
+  ) %>% 
+  mutate(
+    roc_data = map2(.x = data, .y = direction, ~ get_roc_data(.x, .y))
+  ) %>% 
+  unnest(roc_data) %>% 
+  select(-c(data, direction))
+
+roc_data %>% 
+  ggplot(aes(x = 1 - specificity, y = sensitivity, color = metric)) +
+  geom_line() +
+  geom_abline(slope = 1, intercept = 0, color = "gray") +
+  scale_color_discrete(NULL) +
+  labs(x = "False positive rate", y = "True positive rate") +
+  theme_classic()
+
+ggsave("figures/roc_data.pdf", width = 6, height = 4)
