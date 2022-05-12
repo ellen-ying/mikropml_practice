@@ -65,8 +65,22 @@ get_srn_genus_results <- function(seed) {
          seed = seed)
 }
 
+library(tictoc)
+library(furrr)
+
+#plan("sequential") # serial processing, not parallel
+#plan("multicore") # this does not work with windows or R studio
+plan("multisession")
+
+# use tictoc package to get the running time
+tic()
 # using seed 1, 2, 3 to split the data
-iterative_run_ml_results <-map(c(1, 2, 3), ~ get_srn_genus_results(.x))
+#iterative_run_ml_results <-map(c(1, 2, 3), ~ get_srn_genus_results(.x))
+# run map function in parallel
+iterative_run_ml_results <-future_map(c(1, 2, 3), ~ get_srn_genus_results(.x),
+                                      .option = furrr_options(seed = TRUE))
+toc()
+
 performance <- 
   iterative_run_ml_results %>% 
   # use the pluck function to get the part we want
