@@ -35,14 +35,55 @@ srn_genus_results_no_pp <-
          training_frac = 0.8, # training set = 80% of the dataset
          seed = 19990331)
 
+# specify the hyperparameters that are fed into the cross-validation process
+# each combination of hyperparameters will go through cv for 100 times
+test_hp <- list(alpha = 0,
+                lambda = c(0.1, 1, 3, 5, 10))
+
 # train with preprocessed data
 srn_genus_results <- 
   run_ml(srn_genus_preprocessed,
-         # usinglogistic regression method
+         # using logistic regression method
          method = "glmnet",
          outcome_colname = "srn",
          kfold = 5, # five-fold cross-validation
          cv_times = 100, # iteration times
          training_frac = 0.8, # training set = 80% of the dataset
+         hyperparameters = test_hp,
          seed = 19990331)
 
+# construct a function to run different splits on the data
+get_srn_genus_results <- function(seed) {
+  run_ml(srn_genus_preprocessed,
+         # using logistic regression method
+         method = "glmnet",
+         outcome_colname = "srn",
+         kfold = 5, # five-fold cross-validation
+         cv_times = 100, # iteration times
+         training_frac = 0.8, # training set = 80% of the dataset
+         hyperparameters = test_hp,
+         seed = seed)
+}
+
+# using seed 1, 2, 3 to split the data
+iterative_run_ml_results <-map(c(1, 2, 3), ~ get_srn_genus_results(.x))
+performance <- 
+  iterative_run_ml_results %>% 
+  # use the pluck function to get the part we want
+  # the pluck function is from purrr package
+  map(pluck, "trained_model") %>% 
+  # combined results
+  combine_hp_performance()
+
+# plot the performance of difference hyperparameters
+plot_hp_performance(performance$dat, lambda, AUC)
+
+# find the best performing hyperparameters
+performance$dat %>% 
+  group_by(alpha, lambda) %>% 
+  summarize(mean_AUC = mean(AUC), .groups = "drop") %>% 
+  # select the row with the highest value of mean_AUC
+  top_n(mean_AUC, n = 1)
+
+# this function gets you the default hyperparameters values for the training
+get_hyperparams_list(srn_genus_preprocessed, "glmnet")
