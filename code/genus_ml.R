@@ -95,9 +95,12 @@ plot_hp_performance(performance$dat, lambda, AUC)
 # find the best performing hyperparameters
 performance$dat %>% 
   group_by(alpha, lambda) %>% 
-  summarize(mean_AUC = mean(AUC), .groups = "drop") %>% 
+  summarize(mean_AUC = mean(AUC), 
+            lquartile = quantile(AUC, probs = 0.25),
+            lquartile = quantile(AUC, probs = 0.75),
+            .groups = "drop") %>% 
   # select the row with the highest value of mean_AUC
-  top_n(mean_AUC, n = 1)
+  top_n(mean_AUC, n = 3)
 
 # this function gets you the default hyperparameters values for the training
 get_hyperparams_list(srn_genus_preprocessed, "glmnet")
